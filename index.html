@@ -93,7 +93,7 @@
                                     <option value="Hysteria2">Hysteria 2 (极速 UDP)</option>
                                     <option value="dokodemo-door">任意门 (端口转发/链式代理)</option>
                                 </select>
-                                <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="端口" class="border text-sm p-2 rounded w-24 bg-gray-50 outline-none">
+                                <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="监听端口" class="border text-sm p-2 rounded w-24 bg-gray-50 outline-none">
                             </div>
                             
                             <div v-if="newNodeParams[vps.ip].protocol === 'Reality'" class="bg-gray-50 p-3 rounded mb-2 text-sm border">
@@ -126,9 +126,16 @@
                         </div>
                     </div>
 
-                    <div class="bg-black p-4 cursor-pointer group" @click="copyCommand(generateCmd(vps.ip))">
-                        <div class="text-xs text-gray-400 mb-1 flex justify-between"><span>VPS 初始化部署指令</span> <span class="opacity-0 group-hover:opacity-100 transition">点击复制</span></div>
-                        <code class="text-green-400 font-mono text-xs break-all line-clamp-2">{{ generateCmd(vps.ip) }}</code>
+                    <div class="grid grid-cols-2 gap-2 mt-auto p-4 bg-gray-50 border-t">
+                        <div class="bg-black p-3 rounded cursor-pointer group col-span-2 md:col-span-1" @click="copyCommand(generateCmd(vps.ip))">
+                            <div class="text-[10px] text-gray-400 mb-1 uppercase tracking-wider">初始化 / 同步指令</div>
+                            <div class="text-green-400 font-mono text-xs truncate">bash <(curl -sL ...</div>
+                        </div>
+                        
+                        <div class="bg-blue-600 p-3 rounded cursor-pointer hover:bg-blue-700 transition flex items-center justify-center text-white font-bold shadow-sm col-span-2 md:col-span-1" @click="copyCommand(generateSubLink(vps.ip), '订阅链接已复制！')">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                            复制该机订阅
+                        </div>
                     </div>
                 </div>
             </div>
@@ -258,11 +265,14 @@
                 };
 
                 const generateCmd = (ip) => `bash <(curl -sL https://raw.githubusercontent.com/a62169722/KUI/main/vps/kui.sh) --api "${currentDomain}" --ip "${ip}" --token "${token.value}"`;
-                const copyCommand = (text) => navigator.clipboard.writeText(text).then(() => alert('部署指令已复制！'));
+                
+                const generateSubLink = (ip) => `${currentDomain}/api/sub?ip=${ip}&token=${token.value}`;
+
+                const copyCommand = (text, msg = '部署指令已复制！') => navigator.clipboard.writeText(text).then(() => alert(msg));
 
                 onMounted(() => { if (token.value) { isLoggedIn.value = true; refreshData(); } });
 
-                return { isLoggedIn, password, login, logout, servers, nodes, newVps, newNodeParams, isOnline, refreshData, addVps, deleteVps, getNodesByIp, getAllOtherNodes, getVpsName, addNode, deleteNode, generateCmd, copyCommand };
+                return { isLoggedIn, password, login, logout, servers, nodes, newVps, newNodeParams, isOnline, refreshData, addVps, deleteVps, getNodesByIp, getAllOtherNodes, getVpsName, addNode, deleteNode, generateCmd, generateSubLink, copyCommand };
             }
         }).mount('#app');
     </script>
