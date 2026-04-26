@@ -75,6 +75,7 @@
                                 <div>
                                     <span class="font-bold">{{ node.protocol }} <span class="font-mono text-gray-500 text-xs">#{{ node.port }}</span></span>
                                     <div v-if="node.protocol === 'Reality'" class="text-xs text-gray-500 mt-1 font-mono">SNI: {{ node.sni }}</div>
+                                    <div v-if="node.protocol === 'Hysteria2'" class="text-xs text-gray-500 mt-1 font-mono">SNI: 动态小众域名 (无需配置)</div>
                                     <div v-if="node.protocol === 'dokodemo-door'" class="text-xs text-blue-600 mt-1">
                                         转发至 ➔ {{ node.relay_type === 'internal' ? '内部节点ID: '+node.target_id.slice(0,6) : node.target_ip+':'+node.target_port }}
                                     </div>
@@ -89,9 +90,10 @@
                                 <select v-model="newNodeParams[vps.ip].protocol" class="border text-sm p-2 rounded flex-1 bg-gray-50 outline-none">
                                     <option value="VLESS">VLESS (通用)</option>
                                     <option value="Reality">Reality (防封推荐)</option>
+                                    <option value="Hysteria2">Hysteria 2 (极速 UDP)</option>
                                     <option value="dokodemo-door">任意门 (端口转发/链式代理)</option>
                                 </select>
-                                <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="端口" class="border text-sm p-2 rounded w-24 bg-gray-50 outline-none">
+                                <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="监听端口" class="border text-sm p-2 rounded w-24 bg-gray-50 outline-none">
                             </div>
                             
                             <div v-if="newNodeParams[vps.ip].protocol === 'Reality'" class="bg-gray-50 p-3 rounded mb-2 text-sm border">
@@ -255,7 +257,7 @@
                     refreshData();
                 };
 
-                // 注意：替换 YOUR_GITHUB_USERNAME 和 YOUR_REPO 为你真实的仓库地址
+                // 在这里替换为你实际发布的 Github 仓库路径
                 const generateCmd = (ip) => `bash <(curl -sL https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO/main/vps/kui.sh) --api "${currentDomain}" --ip "${ip}" --token "${token.value}"`;
                 const copyCommand = (text) => navigator.clipboard.writeText(text).then(() => alert('部署指令已复制！'));
 
