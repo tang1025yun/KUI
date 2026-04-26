@@ -104,7 +104,6 @@ def fetch_and_apply_configs():
         pass
     return []
 
-# 【核心修复】：更安全的 WARP 部署机制
 def check_and_deploy_warp():
     """安全、防卡死的 WARP 部署与状态检查"""
     try:
@@ -116,11 +115,9 @@ def check_and_deploy_warp():
             echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/cloudflare-client.list
             apt-get update && apt-get install -y cloudflare-warp
             """
-            # 使用 timeout 防止 apt-get 卡死
             subprocess.run(f"timeout 180 bash -c '{install_cmd}'", shell=True)
             time.sleep(2)
 
-        # 检查是否已安装成功
         if subprocess.run("command -v warp-cli", shell=True, stderr=subprocess.DEVNULL).returncode != 0:
             return False
 
@@ -130,11 +127,9 @@ def check_and_deploy_warp():
             subprocess.run("warp-cli --accept-tos registration new", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             subprocess.run("warp-cli --accept-tos mode proxy", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             subprocess.run("warp-cli --accept-tos proxy port 40000", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
-            # 使用 timeout 避免卡在 connecting 状态导致死锁
             subprocess.run("timeout 10 warp-cli --accept-tos connect", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
             time.sleep(3)
             
-            # 再次检查状态，如果还是没连上，就不要在配置里注入 127.0.0.1:40000，防止断网
             new_status = subprocess.check_output("warp-cli --accept-tos status", shell=True).decode()
             if "Connected" not in new_status:
                 print("WARP 连接超时或失败，暂不启用自动解锁")
@@ -149,6 +144,7 @@ def build_singbox_config(nodes, unlock_proxy):
     singbox_config = {
         "log": {"level": "warn"},
         "inbounds": [],
+        # 默认出站：直连，使用 VPS 真实原生 IP
         "outbounds": [{"type": "direct", "tag": "direct-out"}],
         "route": {"rules": []}
     }
@@ -168,23 +164,36 @@ def build_singbox_config(nodes, unlock_proxy):
         except:
             pass
 
+    # ====================================================
+    # 核心升级：超精准的流媒体与 AI 分流路由引擎
+    # ====================================================
     if proxy_ip and proxy_port:
         try:
+            # 添加 WARP 解锁出站
             singbox_config["outbounds"].append({
                 "type": "socks", "tag": "media-unlock", "server": proxy_ip, "server_port": proxy_port
             })
+            
+            # 精准路由规则：只有以下白名单流量才走 WARP 解锁
             singbox_config["route"]["rules"].append({
                 "domain_suffix": [
-                    "netflix.com", "netflix.net", "nflximg.net", "nflxvideo.net", "nflxext.com", "nflxso.net",
-                    "disneyplus.com", "bamgrid.com", "dssott.com",
-                    "openai.com", "chatgpt.com", "ai.com",
-                    "spotify.com", "hbo.com", "hbomax.com",
-                    "youtube.com", "ytimg.com", "googlevideo.com"
+                    # 流媒体系列
+                    "netflix.com", "netflix.net", "nflximg.com", "nflximg.net", "nflxvideo.net", "nflxext.com", "nflxso.net",
+                    "disneyplus.com", "bamgrid.com", "dssott.com", "disneynow.com", "disneystreaming.com",
+                    "hbo.com", "hbomax.com", "hbomaxcdn.com", "max.com",
+                    "spotify.com", "scdn.co", "spoti.fi",
+                    # AI 系列
+                    "openai.com", "chatgpt.com", "ai.com", "auth0.com", "identrust.com",
+                    "anthropic.com", "claude.ai"
+                ],
+                "domain_keyword": [
+                    "netflix", "disneyplus", "openai", "chatgpt", "anthropic", "claude"
                 ],
                 "outbound": "media-unlock"
             })
         except Exception:
             pass
+    # ====================================================
 
     active_certs = []
 
@@ -257,7 +266,6 @@ def build_singbox_config(nodes, unlock_proxy):
         with open(SINGBOX_CONF_PATH, "r") as f:
             old_config_str = f.read()
 
-    # 【核心修复】：避免配置不变时也无脑重启
     if new_config_str != old_config_str:
         with open(SINGBOX_CONF_PATH, "w") as f:
             f.write(new_config_str)
