@@ -1,4 +1,4 @@
- 
+
 # 🚀 KUI - Serverless 极简节点网关控制台
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -30,9 +30,9 @@ KUI 的部署完全基于 Cloudflare 生态，分为四步：
 ### 第一步：初始化 Cloudflare D1 数据库
 
 1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)，进入 **Workers & Pages** -> **D1 SQL 数据库**，点击 **创建数据库**（建议命名为 `kui-db`）。
-2. 进入该数据库的 **控制台 (Console)**，**分三次**执行以下 SQL 语句初始化表结构（每次执行完清空输入框再执行下一个）：
+2. 进入该数据库的 **控制台 (Console)**，**分四次**执行以下 SQL 语句初始化表结构（每次执行完清空输入框再执行下一个）：
 
-**1. 节点状态表：**
+**1. 节点状态表 (servers)：**
 ```sql
 CREATE TABLE IF NOT EXISTS servers (
     ip TEXT PRIMARY KEY,
@@ -43,7 +43,32 @@ CREATE TABLE IF NOT EXISTS servers (
     alert_sent INTEGER DEFAULT 0
 );
 ```
-**2. 流量聚合表：**
+
+**2. 节点配置表 (nodes)：**
+```sql
+CREATE TABLE IF NOT EXISTS nodes (
+    id TEXT PRIMARY KEY,
+    uuid TEXT NOT NULL,
+    vps_ip TEXT NOT NULL,
+    protocol TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    sni TEXT,
+    private_key TEXT,
+    public_key TEXT,
+    short_id TEXT,
+    relay_type TEXT,
+    target_ip TEXT,
+    target_port INTEGER,
+    target_id TEXT,
+    enable INTEGER DEFAULT 1,
+    traffic_used INTEGER DEFAULT 0,
+    traffic_limit INTEGER DEFAULT 0,
+    expire_time INTEGER DEFAULT 0,
+    FOREIGN KEY(vps_ip) REFERENCES servers(ip) ON DELETE CASCADE
+);
+```
+
+**3. 流量聚合表 (traffic_stats)：**
 ```sql
 CREATE TABLE IF NOT EXISTS traffic_stats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +78,8 @@ CREATE TABLE IF NOT EXISTS traffic_stats (
     FOREIGN KEY(ip) REFERENCES servers(ip) ON DELETE CASCADE
 );
 ```
-**3. 性能索引：**
+
+**4. 性能查询索引：**
 ```sql
 CREATE INDEX IF NOT EXISTS idx_traffic_ip_time ON traffic_stats(ip, timestamp);
 ```
@@ -107,4 +133,3 @@ KUI/
 
 本项目仅供网络技术学习、Serverless 架构研究与防御测试使用。请严格遵守当地法律法规，严禁用于任何非法用途。开发者不对使用该工具造成的任何后果负责。
 ```
-
