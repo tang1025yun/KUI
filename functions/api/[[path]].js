@@ -1,5 +1,5 @@
 // ==========================================
-// KUI Serverless 聚合网关后端 - 终极黄金完全体 (支持 7 大协议 + Argo全自动)
+// KUI Serverless 聚合网关后端 - 终极黄金完全体 (支持 7 大协议 + Argo全自动 + TUIC修复)
 // ==========================================
 
 async function sha256(text) {
@@ -78,7 +78,6 @@ export async function onRequest(context) {
             }
         }
         
-        // 处理 Argo 域名静默回传更新
         if (data.argo_urls && data.argo_urls.length > 0) {
             for (let argo of data.argo_urls) {
                 stmts.push(db.prepare("UPDATE nodes SET sni = ? WHERE id = ? AND protocol = 'VLESS-Argo' AND sni != ?").bind(argo.url, argo.id, argo.url));
@@ -90,7 +89,7 @@ export async function onRequest(context) {
         return Response.json({ success: true });
     }
 
-    // [2] Agent 探针拉取配置接口 (VPS端依赖此接口拉取配置)
+    // [2] Agent 探针拉取配置接口
     if (action === "config" && method === "GET") {
         if (!(await verifyAuth(request.headers.get("Authorization"), db, env))) return new Response("Unauthorized", { status: 401 });
         const ip = url.searchParams.get("ip");
@@ -122,7 +121,7 @@ export async function onRequest(context) {
         return Response.json({ success: true, configs: machineNodes });
     }
 
-    // [3] 全量聚合订阅接口 (动态拼接 6 大客户端协议)
+    // [3] 全量聚合订阅接口 (修复了 TUIC 客户端的证书拦截问题)
     if (action === "sub" && method === "GET") {
         const ip = url.searchParams.get("ip");
         const reqUser = url.searchParams.get("user");
@@ -172,12 +171,12 @@ export async function onRequest(context) {
             } else if (node.protocol === "Hysteria2") {
                 subLinks.push(`hysteria2://${node.uuid}@${node.vps_ip}:${node.port}/?insecure=1&sni=${node.sni}#${remark}-Hy2`);
             } else if (node.protocol === "TUIC") {
-                subLinks.push(`tuic://${node.uuid}:${node.private_key}@${node.vps_ip}:${node.port}?sni=${node.sni}&congestion_control=bbr&alpn=h3#${remark}-TUIC`);
+                // 🌟 核心修复：注入了 allow_insecure=1 参数，要求客户端允许自签证书通过
+                subLinks.push(`tuic://${node.uuid}:${node.private_key}@${node.vps_ip}:${node.port}?sni=${node.sni}&congestion_control=bbr&alpn=h3&allow_insecure=1#${remark}-TUIC`);
             } else if (node.protocol === "Socks5") {
                 const auth = btoa(`${node.uuid}:${node.private_key}`);
                 subLinks.push(`socks5://${auth}@${node.vps_ip}:${node.port}#${remark}-Socks5`);
             } else if (node.protocol === "VLESS-Argo" && !node.sni.includes('等待')) {
-                // Argo 必须在 VPS 成功抓取并回传了临时域名后，才下发订阅
                 subLinks.push(`vless://${node.uuid}@${node.sni}:443?encryption=none&security=tls&type=ws&host=${node.sni}&path=%2F#${remark}-Argo`);
             }
         }
@@ -185,7 +184,6 @@ export async function onRequest(context) {
         return new Response(btoa(unescape(encodeURIComponent(subLinks.join('\n')))), { headers: { "Content-Type": "text/plain; charset=utf-8" }});
     }
 
-    // [4] 面板登录接口 (触发双轨制判定和数据库热升级)
     if (action === "login" && method === "POST") {
         const username = await verifyAuth(request.headers.get("Authorization"), db, env);
         if (username) {
@@ -196,7 +194,7 @@ export async function onRequest(context) {
     }
 
     // ==============================================
-    // 以下全部为面板内部管理接口 (鉴权屏障拦截)
+    // 面板内部管理接口屏障
     // ==============================================
     const currentUser = await verifyAuth(request.headers.get("Authorization"), db, env);
     const isAdmin = currentUser === (env.ADMIN_USERNAME || "admin");
@@ -281,9 +279,6 @@ export async function onRequest(context) {
     } catch (err) { return Response.json({ error: err.message }, { status: 500 }); }
 }
 
-// ==========================================
-// Pages 原生内部定时触发器 (Telegram 自动告警)
-// ==========================================
 export async function onRequestScheduled(context) {
     const { env } = context;
     const db = env.DB;
@@ -302,5 +297,5 @@ export async function onRequestScheduled(context) {
             }
             if (updateStmts.length > 0) await db.batch(updateStmts);
         }
-    } catch (error) { console.error("巡检任务执行异常:", error); }
+    } catch (error) {}
 }
