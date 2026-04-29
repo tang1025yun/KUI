@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Serverless 节点网关控制台</title>
+    <title>Serverless 聚合节点面板</title>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
@@ -13,167 +13,212 @@
 <body class="bg-gray-100 text-gray-800 font-sans p-4 md:p-8">
     <div id="app" v-cloak class="max-w-6xl mx-auto space-y-6">
         
+        <!-- 登录界面 (双轨制) -->
         <div v-if="!isLoggedIn" class="bg-white p-8 rounded-lg shadow-md max-w-sm mx-auto mt-20 border-t-4 border-black">
-            <h2 class="text-2xl font-bold mb-6 text-center">安全网关接入</h2>
-            <input v-model="password" type="password" placeholder="请输入 ADMIN_PASSWORD" @keyup.enter="login" class="w-full border p-3 rounded mb-4 focus:ring-2 focus:ring-gray-800 outline-none transition">
+            <h2 class="text-2xl font-bold mb-6 text-center">系统登录</h2>
+            <input v-model="loginUser" placeholder="用户名 (管理员请输入 admin)" class="w-full border p-3 rounded mb-4 focus:ring-2 focus:ring-gray-800 outline-none transition">
+            <input v-model="password" type="password" placeholder="请输入密码" @keyup.enter="login" class="w-full border p-3 rounded mb-6 focus:ring-2 focus:ring-gray-800 outline-none transition">
             <button @click="login" class="w-full bg-black text-white p-3 rounded hover:bg-gray-800 font-bold transition">登 入</button>
         </div>
 
         <div v-else>
+            <!-- 顶部导航 -->
             <div class="bg-white p-5 rounded-lg shadow-sm flex flex-col md:flex-row justify-between items-center border-b-4 border-black mb-6">
                 <h1 class="text-2xl font-black mb-4 md:mb-0">Cluster <span class="text-gray-400 font-normal text-lg">Gateway</span></h1>
                 <div class="flex gap-4 items-center">
                     <span class="text-xs font-bold text-green-500 animate-pulse hidden md:inline-block">🟢 实时监控中</span>
-                    <button @click="refreshData" class="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded text-sm font-medium transition">🔄 手动刷新</button>
+                    <!-- 🌟 聚合订阅入口 (管理员专享) -->
+                    <button v-if="role === 'admin'" @click="copyCommand(generateSubLink(''), '全量聚合订阅已复制！')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-bold transition shadow">🔗 复制全量订阅</button>
+                    <button @click="refreshData" class="bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded text-sm font-medium transition">🔄 刷新</button>
                     <button @click="logout" class="text-red-500 hover:bg-red-50 px-4 py-2 rounded text-sm transition">退出</button>
                 </div>
             </div>
 
-            <div class="bg-white p-6 rounded-lg shadow-sm border mb-6">
-                <div class="flex flex-col md:flex-row gap-4 items-end">
-                    <div class="flex-1">
-                        <label class="block text-xs font-bold text-gray-500 mb-1">服务器别名</label>
-                        <input v-model="newVps.name" placeholder="例如: 专线入口 / 海外落地机" class="w-full border p-2.5 rounded bg-gray-50 outline-none focus:bg-white focus:ring-2 focus:ring-gray-200">
-                    </div>
-                    <div class="flex-1">
-                        <label class="block text-xs font-bold text-gray-500 mb-1">公网 IP</label>
-                        <input v-model="newVps.ip" placeholder="8.8.8.8" class="w-full border p-2.5 rounded bg-gray-50 outline-none focus:bg-white focus:ring-2 focus:ring-gray-200">
-                    </div>
-                    <button @click="addVps" class="bg-black text-white px-8 py-2.5 rounded font-bold hover:bg-gray-800 transition shadow">接入机器</button>
+            <!-- ===================== 管理员专属控制台 ===================== -->
+            <div v-if="role === 'admin'">
+                
+                <!-- 模块切换 Tabs -->
+                <div class="flex space-x-2 border-b-2 border-gray-200 mb-6 pb-2">
+                    <button @click="activeTab = 'nodes'" :class="{'bg-black text-white': activeTab === 'nodes', 'bg-gray-100 text-gray-500': activeTab !== 'nodes'}" class="px-6 py-2 rounded font-bold transition">服务器与节点</button>
+                    <button @click="activeTab = 'users'" :class="{'bg-black text-white': activeTab === 'users', 'bg-gray-100 text-gray-500': activeTab !== 'users'}" class="px-6 py-2 rounded font-bold transition">多用户管理</button>
                 </div>
-            </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div v-for="vps in servers" :key="vps.ip" class="bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col">
-                    
-                    <div class="p-5 border-b relative">
-                        <div class="flex justify-between items-start mb-4">
+                <!-- 模块 1：用户管理 -->
+                <div v-if="activeTab === 'users'">
+                    <div class="bg-white p-6 rounded-lg shadow-sm border mb-6 flex flex-col lg:flex-row gap-4 items-end">
+                        <div class="flex-1"><label class="block text-xs font-bold text-gray-500 mb-1">新建用户名</label><input v-model="newUser.username" placeholder="如: alice" class="w-full border p-2 rounded bg-gray-50"></div>
+                        <div class="flex-1"><label class="block text-xs font-bold text-gray-500 mb-1">登录密码</label><input v-model="newUser.password" type="password" placeholder="******" class="w-full border p-2 rounded bg-gray-50"></div>
+                        <div class="flex-1"><label class="block text-xs font-bold text-gray-500 mb-1">流量配额 (GB, 0为无限)</label><input v-model="newUser.traffic_limit_gb" type="number" placeholder="0" class="w-full border p-2 rounded bg-gray-50"></div>
+                        <div class="flex-1"><label class="block text-xs font-bold text-gray-500 mb-1">到期时间 (留空为永久)</label><input v-model="newUser.expire_date" type="date" class="w-full border p-2 rounded bg-gray-50 text-gray-600"></div>
+                        <button @click="addUser" class="bg-black text-white px-8 py-2 rounded font-bold hover:bg-gray-800 transition">开通用户</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div v-for="u in users" :key="u.username" class="bg-white p-5 rounded-lg shadow-sm border flex flex-col justify-between relative overflow-hidden">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <div class="font-black text-xl mb-1">{{ u.username }} <span v-if="u.enable===0" class="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded align-top">已封禁</span></div>
+                                    <div class="text-xs text-gray-400">到期时间: {{ formatDate(u.expire_time) }}</div>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button @click="toggleUser(u.username, u.enable===1?0:1)" class="px-3 py-1 bg-gray-100 rounded text-xs font-bold">{{ u.enable===1?'停用':'启用' }}</button>
+                                    <button @click="deleteUser(u.username)" class="px-3 py-1 bg-red-50 hover:bg-red-100 text-red-500 rounded text-xs font-bold">删除</button>
+                                </div>
+                            </div>
                             <div>
-                                <h3 class="font-bold text-xl flex items-center gap-2">
-                                    {{ vps.name }}
-                                    <span :class="isOnline(vps.last_report) ? 'bg-green-500' : 'bg-red-500'" class="w-2.5 h-2.5 rounded-full inline-block"></span>
-                                </h3>
-                                <p class="text-sm font-mono text-gray-500">{{ vps.ip }}</p>
-                            </div>
-                            <button @click="deleteVps(vps.ip)" class="text-gray-400 hover:text-red-500 text-sm transition">移除</button>
-                        </div>
-                        
-                        <div class="flex flex-col gap-2">
-                            <div class="flex gap-4">
-                                <div class="flex-1 bg-gray-50 p-2 rounded border">
-                                    <div class="text-xs text-gray-500 mb-1">CPU</div>
-                                    <div class="font-bold">{{ vps.cpu || 0 }}%</div>
-                                    <div class="w-full bg-gray-200 rounded-full h-1 mt-1"><div class="bg-black h-1 rounded-full" :style="{ width: (vps.cpu || 0) + '%' }"></div></div>
+                                <div class="flex justify-between text-[10px] text-gray-500 mb-1">
+                                    <span>总流量已用: {{ formatBytes(u.traffic_used) }}</span>
+                                    <span>配额: {{ u.traffic_limit > 0 ? formatBytes(u.traffic_limit) : '无上限' }}</span>
                                 </div>
-                                <div class="flex-1 bg-gray-50 p-2 rounded border">
-                                    <div class="text-xs text-gray-500 mb-1">RAM</div>
-                                    <div class="font-bold">{{ vps.mem || 0 }}%</div>
-                                    <div class="w-full bg-gray-200 rounded-full h-1 mt-1"><div class="bg-black h-1 rounded-full" :style="{ width: (vps.mem || 0) + '%' }"></div></div>
+                                <div class="w-full bg-gray-100 rounded-full h-1.5 mb-2">
+                                    <div :class="(u.traffic_limit > 0 && u.traffic_used >= u.traffic_limit) ? 'bg-red-500' : 'bg-black'" class="h-1.5 rounded-full" :style="{ width: getTrafficPercent(u.traffic_used, u.traffic_limit) + '%' }"></div>
                                 </div>
+                                <button v-if="u.traffic_used > 0" @click="resetUserTraffic(u.username)" class="text-blue-500 text-[10px] hover:underline">清空该用户流量</button>
                             </div>
                         </div>
+                        <div v-if="users.length === 0" class="col-span-2 text-center py-10 text-gray-400 border-2 border-dashed rounded-lg">暂无普通用户，请添加。</div>
+                    </div>
+                </div>
 
-                        <div class="mt-4 pt-4 border-t border-dashed">
-                            <div class="text-[10px] text-gray-400 mb-2 font-bold tracking-wider">7 DAY TRAFFIC TREND</div>
-                            <div :id="'chart-' + vps.ip" class="w-full h-32"></div>
+                <!-- 模块 2：服务器与节点管理 -->
+                <div v-if="activeTab === 'nodes'">
+                    <div class="bg-white p-6 rounded-lg shadow-sm border mb-6">
+                        <div class="flex flex-col md:flex-row gap-4 items-end">
+                            <div class="flex-1"><label class="block text-xs font-bold text-gray-500 mb-1">服务器别名</label><input v-model="newVps.name" placeholder="例如: 专线入口" class="w-full border p-2.5 rounded bg-gray-50"></div>
+                            <div class="flex-1"><label class="block text-xs font-bold text-gray-500 mb-1">公网 IP</label><input v-model="newVps.ip" placeholder="8.8.8.8" class="w-full border p-2.5 rounded bg-gray-50"></div>
+                            <button @click="addVps" class="bg-black text-white px-8 py-2.5 rounded font-bold hover:bg-gray-800 transition shadow">接入机器</button>
                         </div>
                     </div>
 
-                    <div class="p-5 flex-1 bg-gray-50/50">
-                        <ul class="space-y-4 mb-4">
-                            <li v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="flex flex-col bg-white p-4 border rounded shadow-sm relative">
-                                <div class="flex justify-between items-start mb-2">
-                                    <div>
-                                        <div class="flex items-center gap-2">
-                                            <span class="font-bold">{{ node.protocol }} <span class="font-mono text-gray-500 text-xs">#{{ node.port }}</span></span>
-                                            <span v-if="node.enable === 0" class="text-[10px] bg-gray-200 text-gray-600 px-1.5 rounded">已停用</span>
-                                            <span v-else-if="node.traffic_limit > 0 && node.traffic_used >= node.traffic_limit" class="text-[10px] bg-red-100 text-red-600 px-1.5 rounded">流量超限</span>
-                                            <span v-else-if="node.expire_time > 0 && node.expire_time < Date.now()" class="text-[10px] bg-red-100 text-red-600 px-1.5 rounded">已过期</span>
-                                            <span v-else class="text-[10px] bg-green-100 text-green-600 px-1.5 rounded">运行中</span>
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-2">
-                                        <button @click="toggleNode(node.id, node.enable === 1 ? 0 : 1)" class="text-xs px-2 py-1 rounded" :class="node.enable === 1 ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'">
-                                            {{ node.enable === 1 ? '停用' : '启用' }}
-                                        </button>
-                                        <button @click="deleteNode(node.id)" class="text-red-500 text-xs px-2 py-1 bg-red-50 rounded hover:bg-red-100">删除</button>
-                                    </div>
-                                </div>
-                                
-                                <div class="w-full bg-gray-100 rounded-full h-1.5 mt-2">
-                                    <div :class="(node.traffic_limit > 0 && node.traffic_used >= node.traffic_limit) ? 'bg-red-500' : 'bg-black'" class="h-1.5 rounded-full" :style="{ width: getTrafficPercent(node.traffic_used, node.traffic_limit) + '%' }"></div>
-                                </div>
-                                <div class="flex justify-between text-[10px] text-gray-500 mt-1">
-                                    <span>已用: {{ formatBytes(node.traffic_used) }}</span>
-                                    <button v-if="node.traffic_used > 0" @click="resetTraffic(node.id)" class="text-blue-500 hover:underline">清零</button>
-                                </div>
-                            </li>
-                            <li v-if="getNodesByIp(vps.ip).length === 0" class="text-center text-gray-400 text-sm py-2">暂无挂载规则</li>
-                        </ul>
-
-                        <div class="bg-white p-3 border rounded border-dashed mt-4">
-                            <div class="flex gap-2 mb-2">
-                                <select v-model="newNodeParams[vps.ip].protocol" class="border text-sm p-2 rounded flex-1 bg-gray-50 outline-none">
-                                    <option value="VLESS">VLESS</option>
-                                    <option value="Reality">Reality</option>
-                                    <option value="Hysteria2">Hysteria 2</option>
-                                    <option value="dokodemo-door">转发(任意门)</option>
-                                </select>
-                                <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="端口" class="border text-sm p-2 rounded w-20 bg-gray-50 outline-none">
-                            </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div v-for="vps in servers" :key="vps.ip" class="bg-white rounded-lg shadow-sm border overflow-hidden flex flex-col">
                             
-                            <div v-if="newNodeParams[vps.ip].protocol === 'Reality'" class="bg-gray-50 p-2 rounded mb-2 text-sm border">
-                                <input v-model="newNodeParams[vps.ip].sni" list="sni-recommend" placeholder="伪装域名: 支持手填或下拉选择" class="w-full border p-1.5 rounded outline-none text-xs">
-                                <datalist id="sni-recommend">
-                                    <option value="www.apple.com"></option>
-                                    <option value="gateway.icloud.com"></option>
-                                    <option value="itunes.apple.com"></option>
-                                    <option value="swdist.apple.com"></option>
-                                    <option value="www.microsoft.com"></option>
-                                    <option value="update.microsoft.com"></option>
-                                    <option value="dl.google.com"></option>
-                                </datalist>
+                            <!-- 机器大屏 -->
+                            <div class="p-5 border-b relative">
+                                <div class="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 class="font-bold text-xl flex items-center gap-2">{{ vps.name }}<span :class="isOnline(vps.last_report) ? 'bg-green-500' : 'bg-red-500'" class="w-2.5 h-2.5 rounded-full inline-block"></span></h3>
+                                        <p class="text-sm font-mono text-gray-500">{{ vps.ip }}</p>
+                                    </div>
+                                    <button @click="deleteVps(vps.ip)" class="text-gray-400 hover:text-red-500 text-sm transition">移除</button>
+                                </div>
+                                <div class="flex gap-4">
+                                    <div class="flex-1 bg-gray-50 p-2 rounded border"><div class="text-xs text-gray-500 mb-1">CPU</div><div class="font-bold">{{ vps.cpu || 0 }}%</div><div class="w-full bg-gray-200 rounded-full h-1 mt-1"><div class="bg-black h-1 rounded-full" :style="{ width: (vps.cpu || 0) + '%' }"></div></div></div>
+                                    <div class="flex-1 bg-gray-50 p-2 rounded border"><div class="text-xs text-gray-500 mb-1">RAM</div><div class="font-bold">{{ vps.mem || 0 }}%</div><div class="w-full bg-gray-200 rounded-full h-1 mt-1"><div class="bg-black h-1 rounded-full" :style="{ width: (vps.mem || 0) + '%' }"></div></div></div>
+                                </div>
+                                <div class="mt-4 pt-4 border-t border-dashed"><div class="text-[10px] text-gray-400 mb-2 font-bold tracking-wider">7 DAY TRAFFIC TREND</div><div :id="'chart-' + vps.ip" class="w-full h-32"></div></div>
                             </div>
 
-                            <button @click="addNode(vps.ip)" class="w-full bg-gray-800 text-white text-sm py-2 rounded font-bold hover:bg-black transition">配置下发</button>
-                        </div>
-                    </div>
+                            <!-- 节点列表 -->
+                            <div class="p-5 flex-1 bg-gray-50/50">
+                                <ul class="space-y-4 mb-4">
+                                    <li v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="flex flex-col bg-white p-4 border rounded shadow-sm">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <div>
+                                                <div class="flex items-center gap-2">
+                                                    <span class="font-bold">{{ node.protocol }} <span class="font-mono text-gray-500 text-xs">#{{ node.port }}</span></span>
+                                                    <!-- 🌟 标识节点所属用户 -->
+                                                    <span class="text-[10px] bg-purple-100 text-purple-600 px-1.5 rounded border border-purple-200">👤 {{ node.username }}</span>
+                                                    <span v-if="node.enable === 0" class="text-[10px] bg-gray-200 text-gray-600 px-1.5 rounded">停用</span>
+                                                </div>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <button @click="toggleNode(node.id, node.enable === 1 ? 0 : 1)" class="text-xs px-2 py-1 rounded bg-gray-100">{{ node.enable === 1 ? '停用' : '启用' }}</button>
+                                                <button @click="deleteNode(node.id)" class="text-red-500 text-xs px-2 py-1 bg-red-50 rounded">删除</button>
+                                            </div>
+                                        </div>
+                                        <div class="w-full bg-gray-100 rounded-full h-1.5 mt-2"><div class="bg-black h-1.5 rounded-full" :style="{ width: getTrafficPercent(node.traffic_used, node.traffic_limit) + '%' }"></div></div>
+                                        <div class="flex justify-between text-[10px] text-gray-500 mt-1"><span>单节点已用: {{ formatBytes(node.traffic_used) }}</span><button v-if="node.traffic_used > 0" @click="resetTraffic(node.id)" class="text-blue-500">清零</button></div>
+                                    </li>
+                                </ul>
 
-                    <div class="grid grid-cols-2 gap-2 mt-auto p-4 bg-gray-50 border-t">
-                        <div class="bg-black p-3 rounded cursor-pointer group col-span-2 md:col-span-1" @click="copyCommand(generateCmd(vps.ip))">
-                            <div class="text-[10px] text-gray-400 mb-1 uppercase tracking-wider">终端部署指令 (加固版)</div>
-                            <div class="text-green-400 font-mono text-xs truncate">bash <(curl -sL ...</div>
-                        </div>
-                        <div class="bg-blue-600 p-3 rounded cursor-pointer hover:bg-blue-700 transition flex items-center justify-center text-white font-bold shadow-sm col-span-2 md:col-span-1" @click="copyCommand(generateSubLink(vps.ip), '订阅链接已复制！')">
-                            复制单机订阅
+                                <!-- 🌟 新增节点时绑定用户 -->
+                                <div class="bg-white p-3 border rounded border-dashed mt-4">
+                                    <select v-model="newNodeParams[vps.ip].username" class="w-full border text-sm p-2 rounded bg-gray-50 outline-none mb-2 font-bold text-purple-700">
+                                        <option value="admin">👤 分配给: 管理员 (admin)</option>
+                                        <option v-for="u in users" :value="u.username">👤 分配给: {{ u.username }}</option>
+                                    </select>
+                                    <div class="flex gap-2 mb-2">
+                                        <select v-model="newNodeParams[vps.ip].protocol" class="border text-sm p-2 rounded flex-1 bg-gray-50 outline-none"><option value="VLESS">VLESS</option><option value="Reality">Reality</option><option value="Hysteria2">Hysteria 2</option><option value="dokodemo-door">转发(任意门)</option></select>
+                                        <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="端口" class="border text-sm p-2 rounded w-20 bg-gray-50 outline-none">
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2 mb-2">
+                                        <div class="bg-gray-50 p-2 rounded border"><label class="block text-[10px] text-gray-500 font-bold mb-1">配额(GB, 0无限)</label><input v-model="newNodeParams[vps.ip].traffic_limit_gb" type="number" class="w-full text-sm p-1 border rounded bg-white"></div>
+                                        <div class="bg-gray-50 p-2 rounded border"><label class="block text-[10px] text-gray-500 font-bold mb-1">到期时间(留空永久)</label><input v-model="newNodeParams[vps.ip].expire_date" type="date" class="w-full text-sm p-1 border rounded bg-white"></div>
+                                    </div>
+                                    <div v-if="newNodeParams[vps.ip].protocol === 'Reality'" class="bg-gray-50 p-2 rounded mb-2 text-sm border">
+                                        <input v-model="newNodeParams[vps.ip].sni" list="sni-recommend" placeholder="伪装域名: 支持手填或下拉选择" class="w-full border p-1.5 rounded outline-none text-xs">
+                                        <datalist id="sni-recommend"><option value="www.apple.com"></option><option value="gateway.icloud.com"></option><option value="itunes.apple.com"></option><option value="swdist.apple.com"></option><option value="www.microsoft.com"></option><option value="update.microsoft.com"></option><option value="dl.google.com"></option></datalist>
+                                    </div>
+                                    <div v-if="newNodeParams[vps.ip].protocol === 'dokodemo-door'" class="bg-blue-50 p-2 rounded mb-2 text-sm border border-blue-100">
+                                        <div class="flex gap-4 text-blue-800 font-bold text-[10px] mb-2"><label><input type="radio" v-model="newNodeParams[vps.ip].relay_type" value="external"> 公网转发</label><label><input type="radio" v-model="newNodeParams[vps.ip].relay_type" value="internal"> 内部链式</label></div>
+                                        <div v-if="newNodeParams[vps.ip].relay_type === 'external'" class="flex gap-2"><input v-model="newNodeParams[vps.ip].target_ip" placeholder="目标 IP" class="border p-1.5 rounded flex-1 outline-none text-xs"><input v-model="newNodeParams[vps.ip].target_port" placeholder="端口" class="border p-1.5 rounded w-16 outline-none text-xs"></div>
+                                        <select v-if="newNodeParams[vps.ip].relay_type === 'internal'" v-model="newNodeParams[vps.ip].target_id" class="border p-1.5 rounded w-full outline-none text-xs"><option value="">-- 选择目标节点 --</option><option v-for="n in getAllOtherNodes(vps.ip)" :value="n.id">{{ getVpsName(n.vps_ip) }} - {{ n.protocol }}:{{ n.port }}</option></select>
+                                    </div>
+                                    <button @click="addNode(vps.ip)" class="w-full bg-gray-800 text-white text-sm py-2 rounded font-bold hover:bg-black transition">配置下发</button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 mt-auto p-4 bg-gray-50 border-t">
+                                <div class="bg-black p-3 rounded cursor-pointer group col-span-2 md:col-span-1" @click="copyCommand(generateCmd(vps.ip))"><div class="text-[10px] text-gray-400 mb-1 uppercase tracking-wider">终端部署指令</div><div class="text-green-400 font-mono text-xs truncate">bash <(curl -sL ...</div></div>
+                                <div class="bg-blue-600 p-3 rounded cursor-pointer hover:bg-blue-700 transition flex items-center justify-center text-white font-bold shadow-sm col-span-2 md:col-span-1" @click="copyCommand(generateSubLink(vps.ip), '单机订阅链接已复制！')">复制单机订阅</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            
-            <div v-if="servers.length === 0" class="text-center py-20 text-gray-400 text-lg border-2 border-dashed rounded-lg mt-6 bg-white">
-                集群节点库为空，请先接入服务器。
+
+            <!-- ===================== 普通用户专属控制台 ===================== -->
+            <div v-if="role === 'user'">
+                <div class="bg-white p-10 rounded-xl shadow-sm border text-center mb-6">
+                    <h2 class="text-3xl font-black mb-2 text-gray-800">Hi, {{ currentUser }} 👋</h2>
+                    <p class="text-gray-500 mb-8">欢迎使用您的专属高速网络服务</p>
+                    
+                    <div class="max-w-md mx-auto my-6 bg-gray-50 p-6 rounded-lg border">
+                        <div class="flex justify-between text-sm mb-2 font-bold text-gray-700">
+                            <span>已用流量: {{ formatBytes(users[0]?.traffic_used || 0) }}</span>
+                            <span>总量: {{ users[0]?.traffic_limit > 0 ? formatBytes(users[0].traffic_limit) : '无上限' }}</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4 mb-4 overflow-hidden border">
+                            <div :class="(users[0]?.traffic_limit > 0 && users[0]?.traffic_used >= users[0]?.traffic_limit) ? 'bg-red-500' : 'bg-black'" class="h-4 rounded-full transition-all duration-500" :style="{ width: getTrafficPercent(users[0]?.traffic_used||0, users[0]?.traffic_limit||0) + '%' }"></div>
+                        </div>
+                        <div class="text-xs text-gray-500 flex justify-between">
+                            <span>状态: <span :class="users[0]?.enable === 1 ? 'text-green-500' : 'text-red-500'">{{ users[0]?.enable === 1 ? '正常' : '已停用' }}</span></span>
+                            <span>到期时间: {{ formatDate(users[0]?.expire_time) }}</span>
+                        </div>
+                    </div>
+
+                    <button @click="copyCommand(generateSubLink(''), '专属聚合订阅已复制！请前往客户端导入。')" class="bg-blue-600 hover:bg-blue-700 text-white font-black py-4 px-10 rounded-full shadow-lg transition transform hover:scale-105 active:scale-95 text-lg">
+                        🔗 一键复制我的聚合订阅
+                    </button>
+                    <p class="text-xs text-gray-400 mt-4">该链接包含您名下的所有高速节点，请勿泄露给他人。</p>
+                </div>
+                
+                <h3 class="font-bold text-lg mb-4 text-gray-700 px-2">📍 我已开通的节点列表</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div v-for="node in nodes" :key="node.id" class="bg-white p-5 border rounded-lg shadow-sm hover:shadow-md transition">
+                        <div class="font-black text-lg text-gray-800 mb-1">{{ getVpsName(node.vps_ip) }}</div>
+                        <div class="flex justify-between items-center text-xs text-gray-500">
+                            <span class="bg-gray-100 px-2 py-1 rounded font-mono">{{ node.protocol }}</span>
+                            <span>端口: {{ node.port }}</span>
+                        </div>
+                    </div>
+                    <div v-if="nodes.length === 0" class="col-span-3 text-center py-10 text-gray-400 border-2 border-dashed rounded-lg bg-white">
+                        管理员尚未为您分配任何节点。
+                    </div>
+                </div>
             </div>
+            <!-- ======================================================== -->
+
         </div>
     </div>
 
     <script>
         const { createApp, ref, reactive, onMounted, onUnmounted, nextTick } = Vue;
         
-        // --- 密码学工具函数 (Web Crypto API) ---
-        const toBase64Url = (uint8Array) => {
-            let str = ''; for (let i = 0; i < uint8Array.length; i++) str += String.fromCharCode(uint8Array[i]);
-            return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-        };
-        const generateRealityKeys = () => {
-            const keypair = nacl.box.keyPair();
-            return { privateKey: toBase64Url(keypair.secretKey), publicKey: toBase64Url(keypair.publicKey), shortId: crypto.randomUUID().replace(/-/g, '').substring(0, 16) };
-        };
-        
-        const sha256 = async (text) => {
-            const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-            return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-        };
+        const toBase64Url = (uint8Array) => { let str = ''; for (let i = 0; i < uint8Array.length; i++) str += String.fromCharCode(uint8Array[i]); return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); };
+        const generateRealityKeys = () => { const keypair = nacl.box.keyPair(); return { privateKey: toBase64Url(keypair.secretKey), publicKey: toBase64Url(keypair.publicKey), shortId: crypto.randomUUID().replace(/-/g, '').substring(0, 16) }; };
+        const sha256 = async (text) => { const buffer = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)); return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join(''); };
         
         const generateHMAC = async (keyHex, message) => {
             const keyBytes = new Uint8Array(keyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
@@ -185,134 +230,104 @@
         createApp({
             setup() {
                 const isLoggedIn = ref(false);
+                const loginUser = ref('');
                 const password = ref('');
-                // 保存的不再是明文密码，而是密码的 Hash 值
+                
+                const currentUser = ref(localStorage.getItem('kui_user') || '');
                 const authKey = ref(localStorage.getItem('kui_auth_key') || '');
+                const role = ref(localStorage.getItem('kui_role') || '');
+                const activeTab = ref('nodes'); // 默认显示节点管理
+
                 const servers = ref([]);
                 const nodes = ref([]);
+                const users = ref([]);
+                
                 const newVps = ref({ name: '', ip: '' });
                 const newNodeParams = reactive({}); 
+                const newUser = reactive({ username: '', password: '', traffic_limit_gb: '', expire_date: '' });
                 const currentDomain = window.location.origin;
 
-                // --- 页面可见性与轮询控制 ---
                 let pollTimer = null;
+                const startPolling = () => { if (!pollTimer) pollTimer = setInterval(() => { if (isLoggedIn.value) refreshData(); }, 30000); };
+                const stopPolling = () => { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } };
+                const handleVisibilityChange = () => { if (document.hidden) stopPolling(); else if (isLoggedIn.value) { refreshData(); startPolling(); } };
 
-                const startPolling = () => {
-                    if (!pollTimer) pollTimer = setInterval(() => { if (isLoggedIn.value) refreshData(); }, 30000);
-                };
-                const stopPolling = () => {
-                    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-                };
-                const handleVisibilityChange = () => {
-                    if (document.hidden) stopPolling();
-                    else if (isLoggedIn.value) { refreshData(); startPolling(); }
-                };
-
-                // 在线状态判断 (10分钟超时)
                 const isOnline = (lastReport) => lastReport && (Date.now() - lastReport) < 10 * 60 * 1000;
-                
-                // 格式化工具
-                const formatBytes = (bytes) => {
-                    if (bytes === 0) return '0 B';
-                    const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k));
-                    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-                };
-                const formatDate = (ts) => {
-                    if (!ts) return '永久';
-                    const d = new Date(ts);
-                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                };
-                const getTrafficPercent = (used, limit) => {
-                    if (limit === 0) return 0;
-                    return Math.min((used / limit) * 100, 100);
-                };
+                const formatBytes = (bytes) => { if (bytes === 0) return '0 B'; const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'], i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; };
+                const formatDate = (ts) => { if (!ts) return '永久'; const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+                const getTrafficPercent = (used, limit) => { if (limit === 0) return 0; return Math.min((used / limit) * 100, 100); };
 
-                // 核心请求：带强力错误拦截和动态 HMAC
+                // --- API 请求封装 (动态生成 Token) ---
                 const fetchApi = async (url, options = {}) => {
                     const timestamp = Date.now().toString();
-                    const signature = await generateHMAC(authKey.value, timestamp);
+                    const signature = await generateHMAC(authKey.value, currentUser.value + timestamp);
+                    const dynamicToken = `${btoa(currentUser.value)}.${timestamp}.${signature}`;
                     
-                    options.headers = { ...options.headers, 'Authorization': `${timestamp}.${signature}` };
+                    options.headers = { ...options.headers, 'Authorization': dynamicToken };
                     const res = await fetch(url, options);
                     
                     if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
-                    
                     if (!res.ok) {
-                        try {
-                            const errData = await res.json();
-                            alert(`❌ 后端报错 (${res.status}): ${errData.error}\n\n👉 提示：请检查 Cloudflare Pages 设置中是否绑定了 DB 变量，或数据库表结构是否完整！`);
-                        } catch (e) {
-                            alert(`❌ 致命错误 (${res.status}): 后端无法连接数据库，请检查 Cloudflare 上的 D1 设置！`);
-                        }
+                        try { const errData = await res.json(); alert(`❌ 后端报错 (${res.status}): ${errData.error}`); } 
+                        catch (e) { alert(`❌ 致命错误 (${res.status})`); }
                         throw new Error('API Failed');
                     }
                     return res;
                 };
 
-                // 登录流程
+                // --- 登录模块 ---
                 const login = async () => {
+                    if (!loginUser.value) loginUser.value = 'admin'; // 缺省为 admin
                     try {
                         const hashedPass = await sha256(password.value);
                         const timestamp = Date.now().toString();
-                        const signature = await generateHMAC(hashedPass, timestamp);
+                        const signature = await generateHMAC(hashedPass, loginUser.value + timestamp);
+                        const token = `${btoa(loginUser.value)}.${timestamp}.${signature}`;
                         
-                        const res = await fetch('/api/login', {
-                            method: 'POST',
-                            headers: { 'Authorization': `${timestamp}.${signature}` }
-                        });
-
+                        const res = await fetch('/api/login', { method: 'POST', headers: { 'Authorization': token } });
                         if (res.ok) { 
+                            const data = await res.json();
                             authKey.value = hashedPass; 
+                            currentUser.value = loginUser.value;
+                            role.value = data.role;
+                            
                             localStorage.setItem('kui_auth_key', authKey.value); 
-                            isLoggedIn.value = true; 
-                            password.value = ''; // 内存清理
-                            refreshData(); 
-                            startPolling(); 
-                        } else {
-                            alert('密码错误或请求已过期');
-                        }
-                    } catch (e) {
-                        alert('登录验证异常');
-                    }
+                            localStorage.setItem('kui_user', currentUser.value); 
+                            localStorage.setItem('kui_role', role.value); 
+                            
+                            isLoggedIn.value = true; password.value = ''; refreshData(); startPolling(); 
+                        } else alert('账户名或密码错误');
+                    } catch (e) { alert('登录异常'); }
                 };
 
                 const logout = () => { 
-                    localStorage.removeItem('kui_auth_key'); 
-                    isLoggedIn.value = false; 
-                    authKey.value = password.value = ''; 
-                    stopPolling(); 
+                    localStorage.removeItem('kui_auth_key'); localStorage.removeItem('kui_user'); localStorage.removeItem('kui_role');
+                    isLoggedIn.value = false; authKey.value = password.value = ''; currentUser.value = ''; role.value = ''; stopPolling(); 
                 };
 
-                // 渲染图表核心函数 (静默更新防闪烁)
+                // --- 数据拉取与渲染 ---
                 const renderCharts = async () => {
+                    if (role.value !== 'admin') return; // 普通用户不渲染服务器图表
                     await nextTick();
                     for (let vps of servers.value) {
                         try {
                             const res = await fetchApi(`/api/stats?ip=${vps.ip}`);
                             const stats = await res.json();
-                            
                             const chartDom = document.getElementById('chart-' + vps.ip);
                             if (chartDom) {
                                 let myChart = echarts.getInstanceByDom(chartDom);
-                                if (!myChart) {
-                                    myChart = echarts.init(chartDom);
-                                    window.addEventListener('resize', () => myChart.resize());
-                                }
+                                if (!myChart) { myChart = echarts.init(chartDom); window.addEventListener('resize', () => myChart.resize()); }
                                 const days = stats.map(s => s.day);
                                 const bytes = stats.map(s => (s.total_bytes / 1024 / 1024).toFixed(2));
-                                
                                 myChart.setOption({
                                     tooltip: { trigger: 'axis', formatter: '{b}<br/>{c} MB' },
                                     grid: { left: '12%', right: '5%', top: '5%', bottom: '15%' },
                                     xAxis: { type: 'category', boundaryGap: false, data: days, axisLabel: { fontSize: 9, color: '#9ca3af' }, axisLine: { lineStyle: { color: '#e5e7eb' } }},
                                     yAxis: { type: 'value', splitLine: { lineStyle: { type: 'dashed', color: '#f3f4f6' } }, axisLabel: { show: false } },
-                                    series: [{
-                                        data: bytes, type: 'line', smooth: true, symbol: 'none', itemStyle: { color: '#000000' }, lineStyle: { width: 2 },
-                                        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0,0,0,0.15)' }, { offset: 1, color: 'rgba(0,0,0,0)' }]) }
-                                    }]
+                                    series: [{ data: bytes, type: 'line', smooth: true, symbol: 'none', itemStyle: { color: '#000000' }, lineStyle: { width: 2 }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(0,0,0,0.15)' }, { offset: 1, color: 'rgba(0,0,0,0)' }]) } }]
                                 });
                             }
-                        } catch (e) { console.error("加载图表失败:", e); }
+                        } catch (e) {}
                     }
                 };
 
@@ -322,24 +337,28 @@
                         const data = await res.json();
                         servers.value = data.servers || [];
                         nodes.value = data.nodes || [];
-                        servers.value.forEach(s => {
-                            if(!newNodeParams[s.ip]) newNodeParams[s.ip] = { protocol: 'VLESS', port: 443, sni: '', relay_type: 'external', traffic_limit_gb: '', expire_date: '' };
-                        });
+                        users.value = data.users || [];
+                        servers.value.forEach(s => { if(!newNodeParams[s.ip]) newNodeParams[s.ip] = { protocol: 'VLESS', port: 443, sni: '', relay_type: 'external', traffic_limit_gb: '', expire_date: '', username: 'admin' }; });
                         renderCharts();
                     } catch(e) {}
                 };
 
-                // VPS 与 Node 操作方法
-                const addVps = async () => { 
-                    if(!newVps.value.ip || !newVps.value.name) return; 
-                    try {
-                        await fetchApi('/api/vps', { method: 'POST', body: JSON.stringify(newVps.value) }); 
-                        newVps.value = { name: '', ip: '' }; 
-                        refreshData(); 
-                    } catch (e) { console.error("接入机器失败:", e); }
+                // --- 🌟 用户管理功能 (管理员) ---
+                const addUser = async () => {
+                    if(!newUser.username || !newUser.password) return alert('用户名和密码不能为空');
+                    let limitBytes = newUser.traffic_limit_gb ? Math.floor(parseFloat(newUser.traffic_limit_gb) * 1024 * 1024 * 1024) : 0;
+                    let expireTs = newUser.expire_date ? new Date(newUser.expire_date).getTime() : 0;
+                    await fetchApi('/api/users', { method: 'POST', body: JSON.stringify({ username: newUser.username, password: newUser.password, traffic_limit: limitBytes, expire_time: expireTs }) });
+                    newUser.username = ''; newUser.password = ''; newUser.traffic_limit_gb = ''; newUser.expire_date = '';
+                    refreshData();
                 };
+                const toggleUser = async (username, status) => { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username: username, enable: status }) }); refreshData(); };
+                const resetUserTraffic = async (username) => { if(confirm('清空该用户已用流量？(所有名下节点流量不会重置，但用户聚合流量将清零)')) { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username: username, reset_traffic: true }) }); refreshData(); } };
+                const deleteUser = async (username) => { if(confirm('确定删除该用户？其名下节点将被收回给管理员。')) { await fetchApi(`/api/users?username=${username}`, { method: 'DELETE' }); refreshData(); } };
 
-                const deleteVps = async (ip) => { if(confirm('删除机器将清理其下所有节点配置！')) { await fetchApi('/api/vps?ip=' + ip, { method: 'DELETE' }); refreshData(); } };
+                // --- 节点与服务器管理 ---
+                const addVps = async () => { if(!newVps.value.ip || !newVps.value.name) return; await fetchApi('/api/vps', { method: 'POST', body: JSON.stringify(newVps.value) }); newVps.value = { name: '', ip: '' }; refreshData(); };
+                const deleteVps = async (ip) => { if(confirm('删除机器将清理其下所有节点配置！')) { await fetchApi(`/api/vps?ip=${ip}`, { method: 'DELETE' }); refreshData(); } };
                 const getNodesByIp = (ip) => nodes.value.filter(n => n.vps_ip === ip);
                 const getVpsName = (ip) => servers.value.find(s => s.ip === ip)?.name || ip;
                 const getAllOtherNodes = (currentIp) => nodes.value.filter(n => n.vps_ip !== currentIp && n.protocol !== 'dokodemo-door');
@@ -349,7 +368,7 @@
                     if(!params.port) return alert('端口不能为空');
                     let limitBytes = params.traffic_limit_gb ? Math.floor(parseFloat(params.traffic_limit_gb) * 1024 * 1024 * 1024) : 0;
                     let expireTs = params.expire_date ? new Date(params.expire_date).getTime() : 0;
-                    let payload = { id: Date.now().toString(), uuid: crypto.randomUUID(), vps_ip: ip, protocol: params.protocol, port: params.port, traffic_limit: limitBytes, expire_time: expireTs };
+                    let payload = { id: Date.now().toString(), uuid: crypto.randomUUID(), vps_ip: ip, protocol: params.protocol, port: params.port, traffic_limit: limitBytes, expire_time: expireTs, username: params.username };
                     
                     if (params.protocol === 'Reality') { const keys = generateRealityKeys(); payload.sni = params.sni; payload.private_key = keys.privateKey; payload.public_key = keys.publicKey; payload.short_id = keys.shortId; } 
                     else if (params.protocol === 'Hysteria2') { const nicheDomains = ["www.chiba-u.ac.jp", "www.tsukuba.ac.jp", "www.jma.go.jp", "www.epfl.ch", "www.su.se", "www.tu-berlin.de"]; payload.sni = nicheDomains[Math.floor(Math.random() * nicheDomains.length)]; } 
@@ -357,28 +376,23 @@
                     
                     await fetchApi('/api/nodes', { method: 'POST', body: JSON.stringify(payload) }); refreshData();
                 };
-
-                const deleteNode = async (id) => { await fetchApi('/api/nodes?id=' + id, { method: 'DELETE' }); refreshData(); };
+                const deleteNode = async (id) => { await fetchApi(`/api/nodes?id=${id}`, { method: 'DELETE' }); refreshData(); };
                 const toggleNode = async (id, status) => { await fetchApi('/api/nodes', { method: 'PUT', body: JSON.stringify({ id: id, enable: status }) }); refreshData(); };
-                const resetTraffic = async (id) => { if(confirm('确定清空该节点的已用流量？')) { await fetchApi('/api/nodes', { method: 'PUT', body: JSON.stringify({ id: id, reset_traffic: true }) }); refreshData(); } };
+                const resetTraffic = async (id) => { if(confirm('清空单节点流量？')) { await fetchApi('/api/nodes', { method: 'PUT', body: JSON.stringify({ id: id, reset_traffic: true }) }); refreshData(); } };
 
-                // 使用 Hash 值作为安装 Token，防止明文泄露
+                // 🌟 指令与订阅链接生成 (携带 user 参数)
                 const generateCmd = (ip) => `apt-get update -y && apt-get install -y curl && bash <(curl -sL https://raw.githubusercontent.com/a62169722/KUI/main/vps/kui.sh) --api "${currentDomain}" --ip "${ip}" --token "${authKey.value}"`;
-                const generateSubLink = (ip) => `${currentDomain}/api/sub?ip=${ip}&token=${authKey.value}`;
-                const copyCommand = (text, msg = '部署指令已复制！') => navigator.clipboard.writeText(text).then(() => alert(msg));
+                const generateSubLink = (ip = '') => {
+                    let link = `${currentDomain}/api/sub?user=${currentUser.value}&token=${authKey.value}`;
+                    if (ip) link += `&ip=${ip}`;
+                    return link;
+                };
+                const copyCommand = (text, msg = '指令已复制！') => navigator.clipboard.writeText(text).then(() => alert(msg));
 
-                // 声明周期挂载
-                onMounted(() => { 
-                    if (authKey.value) { isLoggedIn.value = true; refreshData(); startPolling(); } 
-                    document.addEventListener('visibilitychange', handleVisibilityChange);
-                });
+                onMounted(() => { if (authKey.value && currentUser.value) { isLoggedIn.value = true; refreshData(); startPolling(); } document.addEventListener('visibilitychange', handleVisibilityChange); });
+                onUnmounted(() => { stopPolling(); document.removeEventListener('visibilitychange', handleVisibilityChange); });
 
-                onUnmounted(() => { 
-                    stopPolling(); 
-                    document.removeEventListener('visibilitychange', handleVisibilityChange); 
-                });
-
-                return { isLoggedIn, password, login, logout, servers, nodes, newVps, newNodeParams, isOnline, formatBytes, formatDate, getTrafficPercent, refreshData, addVps, deleteVps, getNodesByIp, getAllOtherNodes, getVpsName, addNode, deleteNode, toggleNode, resetTraffic, generateCmd, generateSubLink, copyCommand };
+                return { isLoggedIn, loginUser, password, currentUser, role, activeTab, login, logout, servers, nodes, users, newVps, newNodeParams, newUser, addUser, toggleUser, resetUserTraffic, deleteUser, isOnline, formatBytes, formatDate, getTrafficPercent, refreshData, addVps, deleteVps, getNodesByIp, getAllOtherNodes, getVpsName, addNode, deleteNode, toggleNode, resetTraffic, generateCmd, generateSubLink, copyCommand };
             }
         }).mount('#app');
     </script>
