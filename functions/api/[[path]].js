@@ -1,5 +1,5 @@
 // ==========================================
-// KUI 多用户聚合版 - Serverless 后端 API
+// KUI 多用户聚合版 - Serverless 后端 API (终极修复版)
 // ==========================================
 
 async function sha256(text) {
@@ -102,7 +102,6 @@ export async function onRequest(context) {
         if (!isValid) return new Response("Forbidden", { status: 403 });
 
         const now = Date.now();
-        // 过滤：节点未超限、用户未到期、用户未超限、用户未封禁
         let query = `
             SELECT n.* FROM nodes n
             LEFT JOIN users u ON n.username = u.username
@@ -145,6 +144,7 @@ export async function onRequest(context) {
     if (!currentUser) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     try {
+        // --- 拉取全量数据 ---
         if (action === "data") {
             const servers = (await db.prepare("SELECT * FROM servers").all()).results;
             const nodes = isAdmin ? (await db.prepare("SELECT * FROM nodes").all()).results : (await db.prepare("SELECT * FROM nodes WHERE username = ?").bind(currentUser).all()).results;
@@ -152,7 +152,14 @@ export async function onRequest(context) {
             return Response.json({ servers, nodes, users });
         }
         
-        // 管理员专用：用户增删改查
+        // --- 拉取图表数据 (上次丢失的接口) ---
+        if (action === "stats" && method === "GET" && isAdmin) {
+            const query = `SELECT strftime('%m-%d', datetime(timestamp / 1000, 'unixepoch', 'localtime')) as day, SUM(delta_bytes) as total_bytes FROM traffic_stats WHERE ip = ? AND timestamp > ? GROUP BY day ORDER BY day ASC`;
+            const { results } = await db.prepare(query).bind(url.searchParams.get("ip"), Date.now() - 604800000).all();
+            return Response.json(results || []);
+        }
+        
+        // --- 用户管理接口 ---
         if (action === "users" && isAdmin) {
             if (method === "POST") {
                 const { username, password, traffic_limit, expire_time } = await request.json();
@@ -174,18 +181,62 @@ export async function onRequest(context) {
             }
         }
         
-        // 兼容原有的节点/服务器操作 (管理员)
-        if (action === "vps" && isAdmin && method === "POST") {
-            const { ip, name } = await request.json();
-            await db.prepare("INSERT OR IGNORE INTO servers (ip, name, alert_sent) VALUES (?, ?, 0)").bind(ip, name).run();
-            return Response.json({ success: true });
+        // --- 机器管理接口 (补全了 DELETE) ---
+        if (action === "vps" && isAdmin) {
+            if (method === "POST") {
+                const { ip, name } = await request.json();
+                await db.prepare("INSERT OR IGNORE INTO servers (ip, name, alert_sent) VALUES (?, ?, 0)").bind(ip, name).run();
+                return Response.json({ success: true });
+            }
+            if (method === "DELETE") {
+                await db.prepare("DELETE FROM servers WHERE ip = ?").bind(url.searchParams.get("ip")).run();
+                return Response.json({ success: true });
+            }
         }
-        if (action === "nodes" && isAdmin && method === "POST") {
-            const n = await request.json();
-            await db.prepare(`INSERT INTO nodes (id, uuid, vps_ip, protocol, port, sni, private_key, public_key, short_id, relay_type, target_ip, target_port, target_id, enable, traffic_used, traffic_limit, expire_time, username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(n.id, n.uuid, n.vps_ip, n.protocol, n.port, n.sni||null, n.private_key||null, n.public_key||null, n.short_id||null, n.relay_type||null, n.target_ip||null, n.target_port||null, n.target_id||null, 1, 0, n.traffic_limit||0, n.expire_time||0, n.username||currentUser).run();
-            return Response.json({ success: true });
+
+        // --- 节点管理接口 (补全了 PUT, DELETE) ---
+        if (action === "nodes" && isAdmin) {
+            if (method === "POST") {
+                const n = await request.json();
+                await db.prepare(`INSERT INTO nodes (id, uuid, vps_ip, protocol, port, sni, private_key, public_key, short_id, relay_type, target_ip, target_port, target_id, enable, traffic_used, traffic_limit, expire_time, username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(n.id, n.uuid, n.vps_ip, n.protocol, n.port, n.sni||null, n.private_key||null, n.public_key||null, n.short_id||null, n.relay_type||null, n.target_ip||null, n.target_port||null, n.target_id||null, 1, 0, n.traffic_limit||0, n.expire_time||0, n.username||currentUser).run();
+                return Response.json({ success: true });
+            }
+            if (method === "PUT") {
+                const { id, enable, reset_traffic } = await request.json();
+                if (reset_traffic) await db.prepare("UPDATE nodes SET traffic_used = 0 WHERE id = ?").bind(id).run();
+                else if (enable !== undefined) await db.prepare("UPDATE nodes SET enable = ? WHERE id = ?").bind(enable, id).run();
+                return Response.json({ success: true });
+            }
+            if (method === "DELETE") {
+                await db.prepare("DELETE FROM nodes WHERE id = ?").bind(url.searchParams.get("id")).run();
+                return Response.json({ success: true });
+            }
         }
 
         return new Response("Not Found", { status: 404 });
     } catch (err) { return Response.json({ error: err.message }, { status: 500 }); }
+}
+
+// ==========================================
+// Pages 原生内部定时触发器 (自动执行巡检)
+// ==========================================
+export async function onRequestScheduled(context) {
+    const { env } = context;
+    const db = env.DB;
+    const nowMs = Date.now();
+    try {
+        const { results } = await db.prepare(`SELECT ip, name, last_report FROM servers WHERE last_report < ? AND alert_sent = 0`).bind(nowMs - 180000).all();
+        if (results && results.length > 0) {
+            const tgBotToken = env.TG_BOT_TOKEN; const tgChatId = env.TG_CHAT_ID;
+            const updateStmts = [];
+            for (let vps of results) {
+                if (tgBotToken && tgChatId) {
+                    const text = `⚠️ [KUI 节点失联告警]\n\n节点别名: ${vps.name}\n公网IP: ${vps.ip}\n最后在线: ${new Date(vps.last_report).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}`;
+                    await fetch(`https://api.telegram.org/bot${tgBotToken}/sendMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: tgChatId, text }) });
+                }
+                updateStmts.push(db.prepare("UPDATE servers SET alert_sent = 1 WHERE ip = ?").bind(vps.ip));
+            }
+            if (updateStmts.length > 0) await db.batch(updateStmts);
+        }
+    } catch (error) { console.error("巡检任务执行异常:", error); }
 }
