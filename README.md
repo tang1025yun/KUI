@@ -102,5 +102,3 @@ apt-get update -y && apt-get install -y curl && bash <(curl -sL [https://raw.git
 
 > 觉得好用的话，欢迎点个 ⭐ **Star** 支持一下！如果有任何问题或建议，欢迎提交 Issue 或 Pull Request。
 ```
-
-直接贴进去，这个排版不仅高大上，而且把你系统里的核心卖点（如“Token解耦”、“D1热升级”、“TG告警”、“8合1下发”）全都写得清清楚楚，完美展现了这个项目的价值！
