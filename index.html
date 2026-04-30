@@ -196,12 +196,12 @@
 
                             <div class="px-6 md:px-8 pb-4">
                                 
-                                <!-- 🌟 彻底强化：FSCARMEN 全系 12 大协议极速部署模块 -->
+                                <!-- 🌟 彻底强化：精简版 9大协议极速部署模块 -->
                                 <div class="bg-indigo-50/70 border-2 border-dashed border-indigo-200 p-6 rounded-[1.5rem] mb-2 relative overflow-hidden group shadow-sm hover:border-indigo-300 transition-all">
-                                    <div class="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl shadow-sm">FSCARMEN QUICK INSTALL</div>
-                                    <h4 class="font-black text-indigo-800 text-lg mb-2 flex items-center gap-2">🚀 极速全量节点下发 (12合1)</h4>
+                                    <div class="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl shadow-sm">QUICK INSTALL</div>
+                                    <h4 class="font-black text-indigo-800 text-lg mb-2 flex items-center gap-2">🚀 极速全量节点下发 (9合1)</h4>
                                     <p class="text-xs text-indigo-500/80 font-bold mb-5 leading-relaxed">
-                                        输入起始端口，系统将采用 FSCARMEN 算法依次为您生成全部 12 个协议阵列：XTLS+Reality, Hysteria2, TUIC, ShadowTLS, Shadowsocks, Trojan, VMess+WS, VLESS+WS+TLS, H2+Reality, gRPC+Reality, AnyTLS, Naive。
+                                        输入起始端口，系统将依次为您生成 9 个稳定防封协议阵列：XTLS+Reality, Hysteria2, TUIC, ShadowTLS, Trojan, H2+Reality, gRPC+Reality, AnyTLS, Naive。
                                     </p>
                                     
                                     <div class="flex flex-col md:flex-row gap-4 mb-2">
@@ -223,7 +223,7 @@
                                 </div>
                                 <!-- 🌟 极速全量模块结束 -->
 
-                                <!-- 保留手动精细化表单供特殊场景使用，并补全所有协议 -->
+                                <!-- 保留手动精细化表单供特殊场景使用 -->
                                 <div class="bg-gradient-to-br from-white/80 to-white/40 p-5 rounded-[1.5rem] border border-white shadow-sm mt-4">
                                     <div class="text-xs font-bold text-slate-400 mb-2 pl-1">手动单节点精细化下发</div>
                                     <select v-model="newNodeParams[vps.ip].username" class="w-full border-none bg-indigo-50/50 text-indigo-700 font-bold text-sm p-3 rounded-xl outline-none mb-3">
@@ -237,10 +237,7 @@
                                             <option value="Hysteria2">Hysteria2 (极速)</option>
                                             <option value="TUIC">TUIC v5 (高并发)</option>
                                             <option value="ShadowTLS">ShadowTLS</option>
-                                            <option value="Shadowsocks">Shadowsocks</option>
                                             <option value="Trojan">Trojan</option>
-                                            <option value="VMess-WS">VMess + WS</option>
-                                            <option value="VLESS-WS-TLS">VLESS + WS + TLS</option>
                                             <option value="H2-Reality">H2 + Reality</option>
                                             <option value="gRPC-Reality">gRPC + Reality</option>
                                             <option value="AnyTLS">AnyTLS</option>
@@ -268,7 +265,7 @@
                                         </datalist>
                                     </div>
                                     
-                                    <div v-if="['TUIC', 'Hysteria2', 'ShadowTLS', 'Trojan', 'VLESS-WS-TLS', 'VMess-WS', 'AnyTLS', 'Naive'].includes(newNodeParams[vps.ip].protocol)" class="bg-slate-100/50 p-3 rounded-xl mb-3">
+                                    <div v-if="['TUIC', 'Hysteria2', 'ShadowTLS', 'Trojan', 'AnyTLS', 'Naive'].includes(newNodeParams[vps.ip].protocol)" class="bg-slate-100/50 p-3 rounded-xl mb-3">
                                         <input v-model="newNodeParams[vps.ip].sni" placeholder="SNI 域名 / 主机名" class="w-full bg-transparent outline-none text-sm font-medium text-slate-700">
                                     </div>
                                     
@@ -557,7 +554,7 @@
                     } else if (p.protocol === 'TUIC') { 
                         if (!p.sni) return alert('TUIC 必填 SNI！'); 
                         payload.private_key = crypto.randomUUID().replace(/-/g, ''); 
-                    } else if (p.protocol === 'ShadowTLS' || p.protocol === 'Shadowsocks' || p.protocol === 'Trojan' || p.protocol === 'AnyTLS') {
+                    } else if (p.protocol === 'ShadowTLS' || p.protocol === 'Trojan' || p.protocol === 'AnyTLS') {
                         // 🌟 修复：手动下发也应用 16 字节 Base64 密码以兼容 2022-blake3-aes-128-gcm
                         const array = new Uint8Array(16);
                         crypto.getRandomValues(array);
@@ -581,7 +578,7 @@
                     refreshData();
                 };
                 
-                // 🌟 完美复刻开源脚本逻辑：极速全系 12 大协议下发
+                // 🌟 完美复刻开源脚本逻辑：极速全系 9 大协议下发
                 const deployAllProtocols = async (ip) => {
                     let startPort = parseInt(batchStartPort[ip]);
                     if (!startPort || startPort < 10 || startPort > 65000) {
@@ -592,20 +589,17 @@
                     const commonUser = batchUser[ip] || 'admin';
                     const commonUUID = crypto.randomUUID(); // 全局复用同一个 UUID
                     
-                    // 完全匹配 fscarmen 的 12 个核心协议矩阵和端口递增策略
+                    // 剔除了 SS2022, VMess-WS, VLESS-WS-TLS 后的 9 合 1
                     const protocolSequence = [
                         { protocol: 'XTLS-Reality', offset: 0, sni: defaultSni, type: 'reality' },
                         { protocol: 'Hysteria2', offset: 1, sni: defaultSni },
                         { protocol: 'TUIC', offset: 2, sni: defaultSni },
                         { protocol: 'ShadowTLS', offset: 3, sni: defaultSni },
-                        { protocol: 'Shadowsocks', offset: 4 },
-                        { protocol: 'Trojan', offset: 5, sni: defaultSni },
-                        { protocol: 'VMess-WS', offset: 6, sni: defaultSni },
-                        { protocol: 'VLESS-WS-TLS', offset: 7, sni: defaultSni },
-                        { protocol: 'H2-Reality', offset: 8, sni: defaultSni, type: 'reality' },
-                        { protocol: 'gRPC-Reality', offset: 9, sni: defaultSni, type: 'reality' },
-                        { protocol: 'AnyTLS', offset: 10, sni: defaultSni },
-                        { protocol: 'Naive', offset: 11, sni: defaultSni }
+                        { protocol: 'Trojan', offset: 4, sni: defaultSni },
+                        { protocol: 'H2-Reality', offset: 5, sni: defaultSni, type: 'reality' },
+                        { protocol: 'gRPC-Reality', offset: 6, sni: defaultSni, type: 'reality' },
+                        { protocol: 'AnyTLS', offset: 7, sni: defaultSni },
+                        { protocol: 'Naive', offset: 8, sni: defaultSni }
                     ];
 
                     const confirmMsg = `🚀 极速部署确认：\n\n系统将按照 FSCARMEN 模式，向该服务器并发下发完整 ${protocolSequence.length} 个协议矩阵：\n` + 
@@ -651,7 +645,7 @@
                     }
 
                     batchStartPort[ip] = ''; // 清空输入框
-                    alert("✅ 极速 12合1 全家桶部署指令已发送！\n\n远端探针将在约十秒后的心跳中自动拉取配置，并使用成熟的底层环境启动所有引擎，请稍候。");
+                    alert("✅ 极速 9合1 全家桶部署指令已发送！\n\n远端探针将在约十秒后的心跳中自动拉取配置，并使用成熟的底层环境启动所有引擎，请稍候。");
                     refreshData();
                 };
 
